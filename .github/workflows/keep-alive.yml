@@ -1,0 +1,29 @@
+name: Keep Render & Supabase Awake
+
+on:
+  schedule:
+    # Runs every 10 minutes 24/7 to keep Render free-tier awake and Supabase DB active
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping Render API & Supabase DB
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Warm up Render API (/health) and Supabase DB (/api/communities/public)
+        run: |
+          echo "Pinging Render /health endpoint..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 https://moquim-api-testing.onrender.com/health)
+          echo "Health status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -ne 200 ]; then
+            echo "Render cold start detected or non-200 status ($HTTP_STATUS), retrying..."
+            sleep 5
+            curl -fsS --max-time 60 https://moquim-api-testing.onrender.com/health
+          fi
+
+          echo "Querying /api/communities/public to keep Supabase PostgreSQL warm..."
+          curl -fsS --max-time 30 https://moquim-api-testing.onrender.com/api/communities/public
+          echo ""
+          echo "Keep-alive ping succeeded at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
